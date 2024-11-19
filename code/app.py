@@ -1,7 +1,9 @@
-﻿import eventlet
+﻿import time
+
+import eventlet
 eventlet.monkey_patch()  # eventlet 패치를 맨 위에 추가
 
-import base64
+
 import main
 import logging
 import signal
@@ -9,9 +11,11 @@ import sys
 import threading
 from dataclasses import dataclass
 from typing import Dict
-import os
 import socketio
-from flask import Flask, send_from_directory
+import temp2
+from flask import Flask, send_from_directory, jsonify
+import os
+import base64
 
 # Initialize logging
 logging.basicConfig(level=logging.INFO)
@@ -406,7 +410,27 @@ def result(sid, data):
     )
 
 
-    main.input(input_msg.__dict__, True)
+    qr_data = main.input(input_msg.__dict__, True)
+    QR(qr_data)
+
+
+def QR(data):
+    sid = 'ai'
+    image_str = data  # 클라이언트에서 단순히 base64 문자열을 전송
+    logger.info(image_str)
+    if not isinstance(image_str, str):
+        logger.error("Invalid QR image data format.")
+        sio.emit('error', {'message': 'Invalid QR data'}, to=sid)
+        return
+
+    hub.set_output_image_data(image_str)
+    monitor_sid = hub.get_client_sid(ClientRole.MONITOR)
+    if monitor_sid:
+        output_msg = OutputMessage(image=image_str)
+        sio.emit('QR', output_msg.__dict__, to=monitor_sid)
+        logger.info("Sent 'QR' event to Monitor client.")
+    else:
+        logger.warning("Monitor client is not connected.")
 
     '''
     output_directory = r"C:\/Users\kyle0\Desktop\/ai-together-backend_new\/res_img"
@@ -515,52 +539,24 @@ def run_server():
     # Run the server with eventlet
     eventlet.wsgi.server(eventlet.listen(('0.0.0.0', 8888)), app)
 
+
+
 def shutdown_server(signum, frame):
     logger.info("Shutting down server...")
     sys.exit(0)
-    import os
-    import base64
-    from flask import Flask, request, jsonify
-    from PIL import Image
-    from io import BytesIO
 
-    app = Flask(__name__)
+def restart_server(interval_seconds: int):
+    while True:
+        time.sleep(interval_seconds)
+        logger.info(f"Server will restart after {interval_seconds} seconds.")
+        os.execv(sys.executable, ['python'] + sys.argv)  # 현재 실행 중인 서버를 재시작
 
-    # 이미지 업로드 경로 설정
-    UPLOAD_FOLDER = 'uploads'
-    os.makedirs(UPLOAD_FOLDER, exist_ok=True)
-    app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
-
-    @app.route('/upload', methods=['POST'])
-    def upload_image():
-        try:
-            # Base64 문자열 받기
-            data = request.json.get('image_data')
-            if not data:
-                return jsonify({"error": "No image data provided"}), 400
-
-            # Base64로 인코딩된 데이터를 디코딩하여 이미지로 변환
-            img_data = base64.b64decode(data.split(',')[1])  # data URI 형식 처리 (prefix 제거)
-            image = Image.open(BytesIO(img_data))
-
-            # 이미지 파일로 저장
-            file_path = os.path.join(app.config['UPLOAD_FOLDER'], 'uploaded_image.png')
-            image.save(file_path)
-
-            # 이미지가 업로드된 URL 반환 (서버에서 이미지 제공)
-            image_url = f"http://localhost:5000/{file_path}"
-            return jsonify({"image_url": image_url}), 200
-
-        except Exception as e:
-            return jsonify({"error": str(e)}), 500
-
-    @app.route('/uploads/<filename>')
-    def uploaded_file(filename):
-        return send_from_directory(app.config['UPLOAD_FOLDER'], filename)
-
-    if __name__ == '__main__':
-        app.run(debug=True)
-
+@app.route('/download/<filename>', methods=['GET'])
+def download_file(filename):
+    try:
+        return send_from_directory(r"C:\Users\kyle0\Desktop\ag_BE\res_img", filename, as_attachment=True)
+    except FileNotFoundError:
+        return jsonify({"error": "File not found"}), 404
 
 if __name__ == '__main__':
     # Handle graceful shutdown
@@ -568,5 +564,8 @@ if __name__ == '__main__':
     signal.signal(signal.SIGTERM, shutdown_server)
 
     logger.info("Starting server on 0.0.0.0:8888")
-
+    '''
+    interval = 10  # 1시간 (3600초)마다 서버 재시작
+    eventlet.spawn(restart_server, interval)  # 별도의 스레드에서 서버 재시작을 주기적으로 실행
+    '''
     run_server()

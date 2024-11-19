@@ -11,6 +11,7 @@ import logging
 from concurrent.futures import ThreadPoolExecutor
 import os
 import temp
+import temp2
 import app
 
 # Mediapipe Face Mesh 초기화
@@ -232,7 +233,12 @@ def input(data, temp):
         if temp:
             app.logger.info("save image to res_img")
             cv2.imwrite(r'../res_img/res.png', processed_image)
-            #convert_image_to_qr("../res_img/res.png", "../qrcode/qr.png")
+            temp2.generate_qr_code_with_download_link()
+            QR_data = image_to_base64(r'C:\Users\kyle0\Desktop\ag_BE\res_img\qr_code.png')
+
+            image_qr = QR_data  # 클라이언트에서 단순히 base64 문자열을 전송
+            return image_qr
+
 
 
         # 필터링된 이미지를 Base64로 인코딩
@@ -246,6 +252,19 @@ def input(data, temp):
 
     except Exception as e:
         app.logger.error(f"Error during image processing: {e}")
+
+
+def image_to_base64(image_path):
+    try:
+        with open(image_path, "rb") as image_file:
+            # 이미지를 바이너리 모드로 읽어서 Base64로 변환
+            encoded_string = base64.b64encode(image_file.read()).decode("utf-8")
+        return encoded_string
+    except FileNotFoundError:
+        raise Exception(f"이미지 파일을 찾을 수 없습니다: {image_path}")
+    except Exception as e:
+        raise Exception(f"이미지를 Base64로 변환하는 중 오류가 발생했습니다: {str(e)}")
+
 
 '''
 def main():
